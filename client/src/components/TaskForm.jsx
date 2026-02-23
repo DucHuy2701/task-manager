@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useActionState, useOptimistic } from "react";
 
 function TaskForm({
   onTaskAdded,
@@ -6,37 +6,34 @@ function TaskForm({
   isEditMode = false,
   onClose,
 }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState("medium");
-  const [status, setStatus] = useState("pending");
+  const isNew = !isEditMode;
+  const actionType = isEditMode ? "update" : "create";
 
-  useEffect(() => {
-    if (initialTask) {
-      setTitle(initialTask.title || "");
-      setDescription(initialTask.description || "");
-      setPriority(initialTask.priority || "medium");
-      setStatus(initialTask.status || "pending");
-    }
-  }, [initialTask]);
+  //optimistic state
+  const [optimisticTasks, addOptimisticTasks] = useOptimistic(
+    [],
+    (current, newTask) => [...current, newTask],
+  );
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!title.trim()) return alert("Title is required");
+  //action function
+  const taskAction = async (prevState, formData) => {
+    const title = (formData.get("title") ?? '').trim();
+    const description = (formData.get("description") ?? '').trim() || null;
+    const priority = (formData.get("priority") ?? 'medium').trim();
+    const status = (formData.get("status") ?? 'pending').trim();
 
-    const taskData = {
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-      status,
-    };
+    if (!title) return { error: "Title is required!", pending: false };
+
+    const taskData = { title, description, priority, status };
 
     try {
-      const url = isEditMode
-        ? `http://localhost:5000/api/tasks/${initialTask.id}`
-        : "http://localhost:5000/api/tasks";
+      let url = "http://localhost:5000/api/tasks";
+      let method = "POST";
 
-      const method = isEditMode ? "PUT" : "POST";
+      if (isEditMode) {
+        url += `/${initialTask.id}`;
+        method = "PUT";
+      }
 
       const res = await fetch(url, {
         method,
@@ -45,53 +42,72 @@ function TaskForm({
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to save task!");
+        const err = await res.json();
+        return { error: err.error || "Failed to save task!", pending: false };
       }
 
+      const result = await res.json();
       onTaskAdded();
       if (isEditMode && onClose) onClose();
-      if (!isEditMode) {
-        setTitle("");
-        setDescription("");
-        setPriority("medidum");
-        setStatus("pending");
-      }
+
+      addOptimisticTasks({
+        ...taskData,
+        id: result.id || initialTask?.id,
+        created_at: new Date().toISOString(),
+      });
+
+      return { success: true, error: null, pending: false };
     } catch (err) {
-      console.error("Saving task error:", err);
-      alert(err.message || "Error saving task");
+      console.error(err);
+      return { error: "Network error or server issues!", pending: false };
     }
   };
 
+  //useActionState
+  const [state, formAction, isPending] = useActionState(taskAction, {
+    error: null,
+    success: false,
+    pending: false,
+  });
+
   return (
-    <form onSubmit={handleSubmit} className="mb-4">
+    <form action={formAction} className="mb-4">
+      <input type="hidden" name="id" value={initialTask?.id || ""} />
+
       <div className="mb-3">
-        <label className="form-label">Title</label>
+        <label className="form-label">Title (require)</label>
         <input
           type="text"
+          name="title"
           className="form-control"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          defaultValue={initialTask?.title || ""}
           required
+          placeholder="Enter or keep existing title"
+          disabled={isPending}
         />
       </div>
+
       <div className="mb-3">
-        <label className="form-label">Description</label>
-        <input
+        <label className="form-label">Description (optional)</label>
+        <textarea
           type="text"
+          name="description"
           className="form-control"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          defaultValue={initialTask?.description || ""}
+          rows="3"
+          placeholder="Edit if needed, or leave as is"
+          disabled={isPending}
         />
       </div>
+
       <div className="row mb-3">
         <div className="col-md-6">
           <label className="form-label">Priority</label>
           <select
-            type="text"
-            className="form-control"
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
+            name="priority"
+            className="form-select"
+            defaultValue={initialTask?.priority || "medium"}
+            disabled={isPending}
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -101,10 +117,10 @@ function TaskForm({
         <div className="col-md-6">
           <label className="form-label">Status</label>
           <select
-            type="text"
-            className="form-control"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            name="status"
+            className="form-select"
+            defaultValue={initialTask?.status || "pending"}
+            disabled={isPending}
           >
             <option value="pending">Pending</option>
             <option value="in-progress">In-progress</option>
@@ -112,13 +128,32 @@ function TaskForm({
           </select>
         </div>
       </div>
-      
+
+      {state.error && (
+        <div className="alert alert-danger mb-3">{state.error}</div>
+      )}
+      {state.success && (
+        <div className="alert alert-success mb-3">Task save successfulyl!</div>
+      )}
+
       <div className="d-flex gap-2">
-        <button className="btn btn-success flex-fill">
-          {isEditMode ? 'Update Task' : 'Add Task'}
+        <button
+          type="submit"
+          className="btn btn-success flex-fill"
+          disabled={isPending}
+        >
+          {isPending ? "Saving..." : isEditMode ? "Update Task" : "Add Task"}
         </button>
+
         {isEditMode && (
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-secondary"
+            disabled={isPending}
+          >
+            Cancel
+          </button>
         )}
       </div>
     </form>
