@@ -1,4 +1,6 @@
-import { useActionState, useOptimistic } from "react";
+import { useActionState, useOptimistic, useState } from "react";
+import { enrichTaskWithOllama } from "../../../server/ollamaAgent";
+import {Spinner} from 'react-bootstrap';
 
 function TaskForm({
   onTaskAdded,
@@ -8,6 +10,7 @@ function TaskForm({
 }) {
   const isNew = !isEditMode;
   const actionType = isEditMode ? "update" : "create";
+  const [isEnriching, setIsEnriching] = useState(false);
 
   //optimistic state
   const [optimisticTasks, addOptimisticTasks] = useOptimistic(
@@ -17,18 +20,20 @@ function TaskForm({
 
   //action function
   const taskAction = async (prevState, formData) => {
-    const title = (formData.get("title") ?? '').trim();
-    const description = (formData.get("description") ?? '').trim() || null;
-    const priority = (formData.get("priority") ?? 'medium').trim();
-    const status = (formData.get("status") ?? 'pending').trim();
+    const title = (formData.get("title") ?? "").trim();
+    const description = (formData.get("description") ?? "").trim() || null;
+    const priority = (formData.get("priority") ?? "medium").trim();
+    const status = (formData.get("status") ?? "pending").trim();
 
     if (!title) return { error: "Title is required!", pending: false };
-
+    setIsEnriching(true);
     const taskData = { title, description, priority, status };
 
     try {
       let url = "http://localhost:5000/api/tasks";
       let method = "POST";
+
+      const enrichedTask = await enrichTaskWithOllama(taskData);
 
       if (isEditMode) {
         url += `/${initialTask.id}`;
@@ -38,7 +43,7 @@ function TaskForm({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(taskData),
+        body: JSON.stringify(enrichedTask),
       });
 
       if (!res.ok) {
@@ -55,11 +60,12 @@ function TaskForm({
         id: result.id || initialTask?.id,
         created_at: new Date().toISOString(),
       });
-
       return { success: true, error: null, pending: false };
     } catch (err) {
       console.error(err);
       return { error: "Network error or server issues!", pending: false };
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -128,7 +134,12 @@ function TaskForm({
           </select>
         </div>
       </div>
-
+      {isEnriching || isPending && (
+        <div className="alert alert-info mt-3 d-flex align-items-center gap-3 p-3">
+          <Spinner animation="border" variant="primary" />
+          <span>Thinking and optimizing task... 🚀</span>
+        </div>
+      )}
       {state.error && (
         <div className="alert alert-danger mb-3">{state.error}</div>
       )}
@@ -140,9 +151,9 @@ function TaskForm({
         <button
           type="submit"
           className="btn btn-success flex-fill"
-          disabled={isPending}
+          disabled={isPending || isEnriching}
         >
-          {isPending ? "Saving..." : isEditMode ? "Update Task" : "Add Task"}
+          {isPending || isEnriching ? "Optimizing..." : isEditMode ? "Update Task" : "Add Task"}
         </button>
 
         {isEditMode && (

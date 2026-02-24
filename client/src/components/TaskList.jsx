@@ -88,6 +88,11 @@ function TaskList({ refreshTrigger, taskFromParent }) {
                                 <p className="card-text text-muted">
                                     {task.description || 'No description'}
                                 </p>
+                                {task.reason && (
+                                    <div className="mt-2 p-2 bg-light rounded small">
+                                        <strong>AI suggestion:</strong> {task.reason}
+                                    </div>
+                                )}
                                 <div className="d-flex justify-content-between align-item-center mt-3">
                                     <span className={`badge bg-${task.status === 'pending' ? 'secondary' : task.status === 'in-progress' ? 'info' : 'success'}`}>
                                         {task.status}
