@@ -15,6 +15,8 @@ db.serialize(() => {
         description TEXT,
         priority TEXT DEFAULT 'medium',
         status TEXT DEFAULT 'pending',
+        category TEXT DEFAULT 'general',
+        reason TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         `,
