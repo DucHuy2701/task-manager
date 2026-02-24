@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import TaskForm from "./TaskForm";
 
-function TaskList({ refreshTrigger }) {
-  const [tasks, setTasks] = useState([]);
+function TaskList({ refreshTrigger, taskFromParent }) {
+  const [tasks, setTasks] = useState(taskFromParent || []);
   const [loading, setLoading] = useState(true);
   const [editTask, setEditTask] = useState(null);
   const [showModal, setShowModal] = useState(false);
   
+    useEffect(()=>{
+        setTasks(taskFromParent || []);
+    }, [refreshTrigger, taskFromParent]);
+
   const fetchTasks = async () => {
     try {
       const res = await fetch("http://localhost:5000/api/tasks");
