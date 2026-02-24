@@ -2,12 +2,66 @@ import express from "express";
 import cors from "cors";
 import db from "./db.js";
 import { enrichTaskWithOllama } from "./ollamaAgent.js";
+import ollama from "ollama";
 
 const app = express();
 const PORT = 5000;
 
 app.use(cors());
 app.use(express.json());
+
+//ollama
+app.post("/api/ai-suggest", async (req, res) => {
+  const { query } = req.body;
+
+  if (!query.trim()) {
+    return res.status(400).json({ error: "Query is required!" });
+  }
+
+  try {
+    const response = await ollama.chat({
+      model: "qwen2.5:7b",
+      messages: [
+        {
+          role: "system",
+          content:
+            "Bạn là trợ lý gợi ý task sáng tạo, thực tế. Trả về **CHỈ JSON** chỉ chứa title và description ngắn gọn, phù hợp với yêu cầu người dùng. Không thêm text thừa.",
+        },
+        {
+          role: "user",
+          content: `Gợi ý một task hay dựa trên "${query}". Trả về JSON bằng:
+          {
+            "title": "Tiêu đề text ngắn gọn",
+            "description": "Mô tả chi tiết hơn bằng tiếng Anh (1-2 câu)
+          }`,
+        },
+      ],
+      format: "json",
+      options: {
+        temperature: 0.7,
+        num_ctx: 2048,
+      },
+    });
+
+    const raw = response.message.content.trim();
+    let suggestion;
+
+    try {
+      suggestion = JSON.parse(raw);
+    } catch (parseErr) {
+      console.error("Ollama suggest parse error:", parseErr);
+      return res.status(500).json({ error: "Invalid response from AI!" });
+    }
+
+    res.json({
+      title: suggestion.title || "Suggest task",
+      description: suggestion.description || "No description",
+    });
+  } catch (err) {
+    console.error("Ollama suggest error:", err);
+    return res.status(500).json({ error: "Error asking AI!" });
+  }
+});
 
 //get all
 app.get("/api/tasks", (req, res) => {
@@ -63,20 +117,20 @@ app.post("/api/tasks", async (req, res) => {
     priority,
     status,
     category,
-    reason || null
-  ]
+    reason || null,
+  ];
 
-  db.run(sql, params, function (err){
-    if(err){
-      console.error('POST error:', err);
-      return res.status(500).json({error: 'Failed to create task!'});
+  db.run(sql, params, function (err) {
+    if (err) {
+      console.error("POST error:", err);
+      return res.status(500).json({ error: "Failed to create task!" });
     }
     res.status(200).json({
       id: this.lastID,
-      message: 'Task created with Ollama AI enrichment!',
-      task: {...task, id: this.lastID}
-    })
-  })
+      message: "Task created with Ollama AI enrichment!",
+      task: { ...task, id: this.lastID },
+    });
+  });
 });
 
 //update

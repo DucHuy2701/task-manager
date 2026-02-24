@@ -1,6 +1,6 @@
 import ollama from "ollama";
 
-const MODEL = "qwen2.5:14b";
+const MODEL = "qwen2.5:7b";
 
 export async function enrichTaskWithOllama(task) {
   const prompt = `
