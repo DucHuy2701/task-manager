@@ -64,6 +64,53 @@ app.post("/api/ai-suggest", async (req, res) => {
   }
 });
 
+//optimized all task with ollama
+app.get("/api/optimize", async (req, res) => {
+  try {
+    const rows = await new Promise((resolve, reject) => {
+      db.all("SELECT * FROM tasks", [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    const optimized = [];
+    for (const task of rows) {
+      const enriched = await enrichTaskWithOllama({
+        titile: task.title,
+        description: task.description,
+      });
+      enriched.id = task.id;
+
+      await new Promise((resolve, reject) => {
+        db.run(
+          `
+            UPDATE tasks SET priority = ?, status = ?, category = ?, reason = ?
+            WHERE id = ?
+          `,
+          [
+            enriched.priority,
+            enriched.status,
+            enriched.category,
+            enriched.reason,
+            enriched.id,
+          ],
+          function (err) {
+            if (err) reject(err);
+            else resolve();
+          },
+        );
+      });
+      optimized.push(enriched);
+    }
+
+    res.json({ message: "All tasks optimized by AI", count: optimized.length });
+  } catch (err) {
+    console.error("Optimize all error:", err);
+    res.status(500).json({ error: "Failed to optimize tasks" });
+  }
+});
+
 //get all
 app.get("/api/tasks", (req, res) => {
   db.all("SELECT * FROM tasks ORDER BY created_at DESC", [], (err, rows) => {
@@ -135,7 +182,7 @@ app.post("/api/tasks", async (req, res) => {
 });
 
 //update
-app.put("/api/tasks/:id", (req, res) => {
+app.put("/api/tasks/:id", async (req, res) => {
   const { id } = req.params;
   const { title, description, priority, status } = req.body;
 
@@ -143,19 +190,28 @@ app.put("/api/tasks/:id", (req, res) => {
     return res.status(400).json({ error: "Title is required!" });
   }
 
-  const sql = `
-        UPDATE tasks
-        SET title = ?, description = ?, priority = ?, status = ?
-        WHERE id = ?
-    `;
+  const updates = [];
+  const params = [];
 
-  const params = [
-    title.trim(),
-    description?.trim() || null,
-    priority || "medium",
-    status || "pending",
-    id,
-  ];
+  if (title !== undefined) {
+    updates.push("title = ?");
+    params.push(title.trim());
+  }
+  if (description !== undefined) {
+    updates.push("description = ?");
+    params.push(description.trim() || null);
+  }
+  if (priority !== undefined) {
+    updates.push("priority = ?");
+    params.push(priority);
+  }
+  if (status !== undefined) {
+    updates.push("status = ?");
+    params.push(status);
+  }
+
+  const sql = `UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`;
+  params.push(id);
 
   db.run(sql, params, function (err) {
     if (err) {

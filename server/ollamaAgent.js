@@ -15,7 +15,7 @@ export async function enrichTaskWithOllama(task) {
         Title: ${task.title}
         Description: ${task.description || "Không có mô tả"}
 
-        Lý do chọn priority/status/category phải dựa trên nội dung (ví dụ: có từ "urgent", "deadline" => high && in-progress, "học", "code" => category "learning").
+        Lý do chọn priority/status/category phải dựa trên nội dung (ví dụ: có từ "urgent", "deadline" => high && in-progress, "học", "code" => category "learning", task nhẹ thời gian dài hoặc không đề cập đến thời gian hoàn thành => low).
         Trả về ***Chỉ JSON***, không thêm text gì khác.
         Ví dụ output:
         {
@@ -64,7 +64,7 @@ export async function enrichTaskWithOllama(task) {
       priority: enriched.priority || "medium",
       status: enriched.status || "pending",
       category: enriched.category || "general",
-      reason: enriched.reason || "No suggestion from AI"
+      reason: enriched.reason || "No suggestion from AI",
     };
   } catch (err) {
     console.error("Ollama error:", err);

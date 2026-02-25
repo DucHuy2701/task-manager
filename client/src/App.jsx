@@ -3,12 +3,11 @@ import { useEffect, useState } from "react";
 import TaskForm from "./components/TaskForm";
 import TaskList from "./components/TaskList";
 import { Modal, Button, Form, Spinner } from "react-bootstrap";
+import ChartDashboard from "./components/ChartDashboard";
 
 function App() {
   const [tasks, setTasks] = useState([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const STORAGE_KEY = "task-manager-tasks";
 
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [suggestQuery, setSuggestQuery] = useState("");
@@ -16,6 +15,26 @@ function App() {
 
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const [isOptimizing, setIsOptimizing] = useState(false);
+
+  //optimize all
+  const handleOptimizeAll = async () => {
+    if (!confirm("Optimize all tasks with AI? This may take time.")) return;
+
+    setIsOptimizing(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/optimize");
+      if (!res.ok) throw new Error("Optimize failed!");
+      handleTaskAdded();
+      alert("All tasks optimized by AI!");
+    } catch (err) {
+      alert("Error optimizing tasks: ", err.message);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
 
   //handle add suggestion
   const handleAddSuggestion = async () => {
@@ -43,7 +62,7 @@ function App() {
       setAiSuggestion(null);
       setSuggestQuery("");
 
-      alert("Task form suggestion has been added and optimized!");
+      alert("Task form suggestion has been added and optimized!\n", data);
     } catch (err) {
       console.log("Add suggestion error:", err);
       setErrorMessage("Error adding task:", err.message);
@@ -86,73 +105,25 @@ function App() {
     }
   };
 
-  //load from local
+  //load from server
   useEffect(() => {
-    const savedTasks = localStorage.getItem(STORAGE_KEY);
-    if (savedTasks) {
+    const fetchTasksFromServer = async () => {
       try {
-        const parsed = JSON.parse(savedTasks);
-        setTasks(parsed);
+        const res = await fetch("http://localhost:5000/api/tasks");
+        if (!res.ok) throw new Error("Failed to fetch!");
+        const data = await res.json();
+        setTasks(data);
       } catch (err) {
-        console.err("Error parsing local tasks:", err);
+        console.error("Fetch tasks error:", err);
       }
-    }
-  }, []);
+    };
 
-  //save to local when tasks change
-  useEffect(() => {
-    if (tasks.length > 0 || localStorage.getItem(STORAGE_KEY)) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    }
-  }, [tasks]);
+    fetchTasksFromServer();
+  }, [refreshTrigger]);
 
   const handleTaskAdded = () => {
     setRefreshTrigger((prev) => prev + 1);
   };
-
-  //sync local to server when online
-  const syncLocalToServer = async () => {
-    if (!navigator.onLine) return;
-    for (const task of tasks) {
-      try {
-        const res = await fetch("http://localhost:5000/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(task),
-        });
-
-        if (res.ok) {
-          const result = await res.json();
-          if (result.id && !res.id) {
-            setTasks((prev) =>
-              prev.map((t) =>
-                t === task ? { ...t, id: result.id, synced: true } : t,
-              ),
-            );
-          }
-        }
-      } catch (err) {
-        console.error("Sync error for task:", err);
-      }
-    }
-  };
-
-  //listen online event to sync
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log("Back online - syncing task ...");
-      syncLocalToServer();
-    };
-
-    window.addEventListener("online", handleOnline);
-
-    //first sync if online
-    if (navigator.onLine) {
-      syncLocalToServer();
-    }
-
-    return () => window.removeEventListener("online", handleOnline);
-  }, [tasks]);
 
   return (
     <div className="container mt-5">
@@ -165,6 +136,14 @@ function App() {
           onClick={() => setShowSuggestModal(true)}
         >
           🧠 Ask AI for smarter task
+        </button>
+
+        <button
+          className="btn btn-outline-info btn-lg"
+          onClick={handleOptimizeAll}
+          disabled={isOptimizing}
+        >
+          {isOptimizing ? "Optimizing... Please wait!" : "Optimize all tasks"}
         </button>
       </div>
 
@@ -222,8 +201,13 @@ function App() {
                   Copy Description
                 </Button>
 
-                <Button variant="success" size="sm" onClick={handleAddSuggestion} disabled={isSuggestLoading}>
-                  {isSuggestLoading ? 'Adding...' : 'Add this to your tasks'}
+                <Button
+                  variant="success"
+                  size="sm"
+                  onClick={handleAddSuggestion}
+                  disabled={isSuggestLoading}
+                >
+                  {isSuggestLoading ? "Adding..." : "Add this to your tasks"}
                 </Button>
               </div>
             </div>
@@ -257,13 +241,7 @@ function App() {
         </Modal.Footer>
       </Modal>
 
-      <div className="mb-3">
-        {navigator.onLine ? (
-          <span className="badge bg-success">Online</span>
-        ) : (
-          <span className="badge bg-warning">Offline - using local data</span>
-        )}
-      </div>
+      <ChartDashboard tasks={tasks} />
 
       <TaskForm onTaskAdded={handleTaskAdded} />
       <TaskList refreshTrigger={refreshTrigger} />

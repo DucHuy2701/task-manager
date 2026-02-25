@@ -1,6 +1,6 @@
 import { useActionState, useOptimistic, useState } from "react";
 import { enrichTaskWithOllama } from "../../../server/ollamaAgent";
-import {Spinner} from 'react-bootstrap';
+import { Spinner } from "react-bootstrap";
 
 function TaskForm({
   onTaskAdded,
@@ -26,14 +26,24 @@ function TaskForm({
     const status = (formData.get("status") ?? "pending").trim();
 
     if (!title) return { error: "Title is required!", pending: false };
+
     setIsEnriching(true);
-    const taskData = { title, description, priority, status };
+
+    let taskData = { title, description, priority, status };
+
+    let enrichedTask = taskData;
+    if (!isEditMode) {
+      try {
+        enrichedTask = await enrichTaskWithOllama(taskData);
+      } catch (enrichErr) {
+        console.error("Enrich error (fallback to original):", enrichErr);
+        enrichedTask = taskData;
+      }
+    }
 
     try {
       let url = "http://localhost:5000/api/tasks";
       let method = "POST";
-
-      const enrichedTask = await enrichTaskWithOllama(taskData);
 
       if (isEditMode) {
         url += `/${initialTask.id}`;
@@ -56,10 +66,11 @@ function TaskForm({
       if (isEditMode && onClose) onClose();
 
       addOptimisticTasks({
-        ...taskData,
+        ...enrichedTask,
         id: result.id || initialTask?.id,
         created_at: new Date().toISOString(),
       });
+
       return { success: true, error: null, pending: false };
     } catch (err) {
       console.error(err);
@@ -134,12 +145,13 @@ function TaskForm({
           </select>
         </div>
       </div>
-      {isEnriching || isPending && (
-        <div className="alert alert-info mt-3 d-flex align-items-center gap-3 p-3">
-          <Spinner animation="border" variant="primary" />
-          <span>Thinking and optimizing task... 🚀</span>
-        </div>
-      )}
+      {isEnriching ||
+        (isPending && (
+          <div className="alert alert-info mt-3 d-flex align-items-center gap-3 p-3">
+            <Spinner animation="border" variant="primary" />
+            <span>Thinking and optimizing task... 🚀</span>
+          </div>
+        ))}
       {state.error && (
         <div className="alert alert-danger mb-3">{state.error}</div>
       )}
@@ -151,9 +163,9 @@ function TaskForm({
         <button
           type="submit"
           className="btn btn-success flex-fill"
-          disabled={isPending || isEnriching}
+          disabled={isPending}
         >
-          {isPending || isEnriching ? "Optimizing..." : isEditMode ? "Update Task" : "Add Task"}
+          {isEditMode ? "Update Task" : "Add Task"}
         </button>
 
         {isEditMode && (

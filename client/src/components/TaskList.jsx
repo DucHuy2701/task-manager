@@ -91,6 +91,7 @@ function TaskList({ refreshTrigger, taskFromParent }) {
                                 {task.reason && (
                                     <div className="mt-2 p-2 bg-light rounded small">
                                         <strong>AI suggestion:</strong> {task.reason}
+                                        <span className="badge bg-info ms-2">AI</span>
                                     </div>
                                 )}
                                 <div className="d-flex justify-content-between align-item-center mt-3">
