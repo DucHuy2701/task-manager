@@ -17,6 +17,41 @@ function App() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
+  //handle add suggestion
+  const handleAddSuggestion = async () => {
+    if (!aiSuggestion) return alert("No suggestion to add!");
+
+    setIsSuggestLoading(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: aiSuggestion.title,
+          description: aiSuggestion.description,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to add suggestion!");
+
+      const data = await res.json();
+
+      handleTaskAdded();
+
+      setShowSuggestModal(false);
+      setAiSuggestion(null);
+      setSuggestQuery("");
+
+      alert("Task form suggestion has been added and optimized!");
+    } catch (err) {
+      console.log("Add suggestion error:", err);
+      setErrorMessage("Error adding task:", err.message);
+    } finally {
+      setIsSuggestLoading(false);
+    }
+  };
+
   // ask ollama
   const handleAskOllama = async () => {
     if (!suggestQuery.trim()) return alert("Must be a question!");
@@ -32,7 +67,7 @@ function App() {
         body: JSON.stringify({ query: suggestQuery }),
       });
 
-      if (!res.ok){
+      if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.error || "Failed to get suggestion!");
       }
@@ -43,7 +78,6 @@ function App() {
         title: data.title,
         description: data.description,
       });
-
     } catch (err) {
       console.error(err);
       alert("Error asking AI:" + err.message);
@@ -176,6 +210,7 @@ function App() {
                 >
                   Copy Title
                 </Button>
+
                 <Button
                   variant="outline-primary"
                   size="sm"
@@ -185,6 +220,10 @@ function App() {
                   }}
                 >
                   Copy Description
+                </Button>
+
+                <Button variant="success" size="sm" onClick={handleAddSuggestion} disabled={isSuggestLoading}>
+                  {isSuggestLoading ? 'Adding...' : 'Add this to your tasks'}
                 </Button>
               </div>
             </div>

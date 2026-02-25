@@ -38,8 +38,9 @@ app.post("/api/ai-suggest", async (req, res) => {
       ],
       format: "json",
       options: {
-        temperature: 0.7,
+        temperature: 0.3,
         num_ctx: 2048,
+        keep_alive: -1,
       },
     });
 
